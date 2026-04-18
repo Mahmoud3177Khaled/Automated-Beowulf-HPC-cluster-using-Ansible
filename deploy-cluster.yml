@@ -1,0 +1,44 @@
+---
+- name: Deploy Full HPC Cluster (Control + Workers)
+  hosts: localhost
+  become: no
+  vars:
+    num_workers: 3
+    vm_cpus: 1
+    vm_memory: "2G"
+    vm_disk: "10G"
+    base_name: "node"
+
+  tasks:
+
+    - name: Create worker VMs using Multipass
+      command: multipass launch --name {{ base_name }}{{ item }} --cpus {{ vm_cpus }} --memory {{ vm_memory }} --disk {{ vm_disk }}
+      loop: "{{ range(1, num_workers + 1) | list }}"
+      register: vm_creation
+
+    - name: Wait for VMs to be ready
+      pause:
+        seconds: 20
+
+    - name: Get IP addresses of all worker nodes
+      command: multipass info {{ base_name }}{{ item }} --format json
+      loop: "{{ range(1, num_workers + 1) | list }}"
+      register: vm_info
+
+    - name: Create dynamic inventory.ini
+      copy:
+        content: |
+          [workers]
+          {% for i in range(1, num_workers + 1) %}
+          node{{ i }} ansible_host={{ (vm_info.results[i-1].stdout | from_json).info[base_name ~ i].ipv4[0] }}
+          {% endfor %}
+
+          [workers:vars]
+          ansible_user=ubuntu
+          ansible_ssh_private_key_file=~/.ssh/id_ed25519
+          ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+        dest: ./inventory.ini
+
+    - name: Show created inventory
+      debug:
+        msg: "Inventory file created with {{ num_workers }} worker nodes"

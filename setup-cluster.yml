@@ -1,0 +1,63 @@
+---
+- name: Configure AIC-style Training Cluster Nodes
+  hosts: workers
+  become: yes
+  vars:
+    cluster_name: "Beowulf Cluster"
+    admin_user: "hpcuser"
+
+  tasks:
+
+#    - name: Update and upgrade all packages
+#      apt:
+#        update_cache: yes
+#        upgrade: dist
+#        autoremove: yes
+#        autoclean: yes
+
+    - name: Install essential tools for HPC cluster
+      apt:
+        name:
+          - vim
+          - git
+          - htop
+          - curl
+          - wget
+          - chrony
+          - firewalld
+          - glances
+          - net-tools
+          - openssh-server
+        state: present
+
+    - name: Configure time synchronization
+      service:
+        name: chrony
+        state: restarted
+        enabled: yes
+
+    - name: Enable and start firewalld
+      service:
+        name: firewalld
+        state: started
+        enabled: yes
+
+    - name: Create dedicated HPC admin user
+      user:
+        name: "{{ admin_user }}"
+        shell: /bin/bash
+        groups: sudo
+        append: yes
+        create_home: yes
+
+    - name: Create professional MOTD
+      copy:
+        content: |
+          ========================================
+             {{ cluster_name }}
+             Hostname : {{ inventory_hostname }}
+             Managed by Ansible
+             Last updated: {{ ansible_date_time.date }}
+          ========================================
+        dest: /etc/motd
+        mode: '0644'

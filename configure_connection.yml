@@ -1,0 +1,36 @@
+---
+- name: Configure passwordless SSH from control node to workers
+  hosts: localhost
+  become: no
+  gather_facts: no
+
+  tasks:
+
+    - name: Generate SSH key pair if it doesn't exist
+      command: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ""
+      args:
+        creates: ~/.ssh/id_ed25519
+
+    - name: Copy public key to all worker nodes
+      shell: |
+        cat ~/.ssh/id_ed25519.pub | multipass exec {{ item }} -- bash -c "
+          mkdir -p ~/.ssh && 
+          cat >> ~/.ssh/authorized_keys && 
+          chmod 700 ~/.ssh && 
+          chmod 600 ~/.ssh/authorized_keys
+        "
+      loop:
+        - node1
+        - node2
+        - node3
+
+    - name: Test SSH connectivity to all nodes
+      command: ssh -o StrictHostKeyChecking=no -o BatchMode=yes ubuntu@{{ hostvars[item]['ansible_host'] }} echo "SSH OK"
+      loop: "{{ groups['workers'] }}"
+      register: ssh_test
+      changed_when: false
+
+    - name: Show SSH test results
+      debug:
+        msg: "{{ item.item }} -> {{ item.stdout }}"
+      loop: "{{ ssh_test.results }}"
